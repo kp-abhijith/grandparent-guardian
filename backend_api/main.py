@@ -39,13 +39,15 @@ async def analyze_text(data: AudioText):
     print(f"{CYAN}[*] Running AI Intent Analysis...{RESET}")
     
     prompt = f"""
-    You are an elite cyber-security AI protecting an elderly user. 
-    Analyze this phone transcript. Look for emotional manipulation, false urgency, or financial demands.
+    You are an elite cyber-security AI protecting an elderly user in India. 
+    Analyze this phone transcript. The transcript may be in English, Hindi, or Hinglish.
+    Understand the cultural context of scams (like fake police, CBI, or OTP bank frauds).
+    Look for emotional manipulation, false urgency, or financial demands.
     Transcript: "{transcript}"
     
-    Respond STRICTLY in this exact format:
+    Respond STRICTLY in English in this exact format:
     THREAT_LEVEL: (High or Low)
-    TACTIC: (One short sentence explaining the psychological trick being used, e.g., 'Creating false authority')
+    TACTIC: (One short sentence explaining the psychological trick being used)
     """
     
     time.sleep(0.5) # Dramatic pause for terminal effect
