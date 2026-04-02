@@ -1,97 +1,253 @@
 import os
 import json
 import uvicorn
+from twilio.rest import Client
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from dotenv import load_dotenv
 import ollama
 
-# Colors for terminal output
+load_dotenv()
+
+# ─── COLORS ───────────────────────────────────────────────────────────────────
 RED, GREEN, YELLOW, CYAN, RESET = '\033[91m', '\033[92m', '\033[93m', '\033[96m', '\033[0m'
 
-print(f"{CYAN}[*] Starting Grandparent Guardian AI (Ollama + Llama 3.2 3B)...{RESET}")
+app = FastAPI(title="Grandparent Guardian - AI Core")
 
-app = FastAPI(title="Grandparent Guardian - Smart Scam Detector")
+# ─── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ─── TWILIO CREDENTIALS ───────────────────────────────────────────────────────
+TWILIO_ACCOUNT_SID   = os.environ.get("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN    = os.environ.get("TWILIO_AUTH_TOKEN", "")
+TWILIO_FROM_NUMBER   = os.environ.get("TWILIO_FROM_NUMBER", "")
+TARGET_FAMILY_NUMBER = os.environ.get("TARGET_FAMILY_NUMBER", "")
+
+# ─── MINIMAL OFFLINE SAFETY NET ───────────────────────────────────────────────
+# ONLY phrases that are 100% scam in ANY context — no false positives possible
+OFFLINE_PHRASES = [
+    "anydesk",
+    "teamviewer",
+    "digital arrest",
+    "cyber crime notice",
+    "customs fee",
+    "fedex parcel seized",
+]
+
+def offline_keyword_check(text: str):
+    lower = text.lower()
+    matched = [p for p in OFFLINE_PHRASES if p in lower]
+    if matched:
+        return {
+            "status":      "scam_detected",
+            "probability": 99,
+            "analysis":    f"Remote access / impersonation scam detected: '{matched[0]}'",
+        }
+    return None
+
+# ─── THE BEST SYSTEM PROMPT ───────────────────────────────────────────────────
+SYSTEM_PROMPT = """
+You are an expert Indian scam detector AI protecting elderly grandparents from phone fraud.
+You have deep knowledge of Indian scam tactics, Indian culture, and family dynamics.
+
+The transcript may be in English, Hindi, Hinglish, or a mix — analyze the MEANING, not just keywords.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+THINK STEP BY STEP BEFORE ANSWERING:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Who is likely calling — a stranger, institution, or known family/friend?
+2. What exactly are they asking for — OTP, money, access, personal info?
+3. Is there urgency, fear, or threat being created?
+4. Does the tone feel scripted and professional, or personal and familiar?
+5. THEN make your final decision.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MARK AS SCAM (status: scam_detected):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Asking for bank OTP, UPI PIN, ATM PIN, CVV, or password from a STRANGER
+- "Share OTP to RECEIVE money or loan" → ALWAYS SCAM, no exceptions
+  (Real banks/senders NEVER need your OTP to send you money)
+- Threats of arrest, account block, court case, police, ED, CBI, RBI action
+- Impersonating: banks, RBI, police, court, IRCTC, Amazon, FedEx, customs
+- Asking to download AnyDesk, TeamViewer, QuickSupport, or any remote app
+- Grandparent scam: stranger pretending to be a relative in emergency needing URGENT money
+- Lottery/prize scams: "You won, pay fee to claim"
+- KYC scams: "Your account will close, update KYC now by sharing details"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MARK AS SAFE (status: safe):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Delivery agent (Amazon, Flipkart, Zomato, Swiggy) asking for delivery OTP
+- Cable/internet/appliance technician asking for service completion OTP
+- Actual family member or friend with personal, familiar tone asking for money casually
+  (e.g., "Dada mujhe college fees ke liye 2000 chahiye" — no threats, personal tone)
+- General health/wellness check from family ("beta kaisa hai", "khaana khaya?")
+- Genuine bank calling to confirm a transaction YOU already initiated
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STRICT CONSISTENCY RULES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- probability = SCAM RISK (0 = completely safe, 100 = definite scam)
+- If probability >= 50 → status MUST be "scam_detected"
+- If probability < 50  → status MUST be "safe"
+- NEVER contradict yourself — high probability MUST equal scam_detected
+- Give analysis in simple language an elderly person would understand
+
+Respond ONLY with valid JSON. No markdown, no explanation outside JSON:
+{"status": "scam_detected" or "safe", "probability": integer 0-100, "analysis": "one simple sentence in English or Hindi"}
+"""
+
+# ─── DATA MODELS ──────────────────────────────────────────────────────────────
 class AudioText(BaseModel):
     text: str
 
+class AlertData(BaseModel):
+    transcript:   str
+    analysis:     str
+    probability:  int
+    family_phone: str = ""
+
+
+# ─── /analyze ─────────────────────────────────────────────────────────────────
 @app.post("/analyze")
 async def analyze_text(data: AudioText):
     transcript = data.text.strip()
-    print(f"\n{CYAN}===================================================={RESET}")
-    print(f"{YELLOW}[+] ANALYZING TRANSCRIPT:{RESET} '{transcript}'")
+    print(f"\n{CYAN}[+] ANALYZING:{RESET} '{transcript}'")
 
-    # ── SUPER SMART SYSTEM PROMPT (Hindi + English + Hinglish) ─────────────────────
-    system_prompt = """
-    You are an expert Indian scam detector protecting grandparents.
-    Analyze the call transcript and detect if it is a scam or safe.
+    # ── Minimal offline safety net (only 100% obvious cases) ──
+    quick = offline_keyword_check(transcript)
+    if quick:
+        print(f"{RED}[!] OFFLINE CATCH: {quick['analysis']}{RESET}")
+        return quick
 
-    Common scam tactics (catch these even in Hindi or Hinglish):
-    - Asking for OTP, bank details, UPI, password, or "confirm payment"
-    - Creating urgency ("abhi kar do warna account block ho jayega")
-    - Impersonating bank, police, government, Amazon, IRCTC, tech support
-    - Offering loan, prize, refund, or "free gift"
-    - Emotional manipulation or threats
-    - Any request for money or personal information
-    - Official student surveys or simple greetings are SAFE.
-
-    Respond ONLY with a valid JSON object in this exact format:
-    {
-      "status": "scam_detected" or "safe",
-      "probability": integer between 0 and 100,
-      "analysis": "1 short simple explanation in easy Hindi or English"
-    }
-    """
+    # ── Ollama AI — does the real thinking ────────────────────
+    print(f"{CYAN}[*] Sending to Llama 3.2 for analysis...{RESET}")
 
     try:
-        # SENIOR FIX 1: Added format='json' and lowered temperature to 0.1 for strict logic
         response = ollama.chat(
             model='llama3.2:3b',
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Call transcript: {transcript}"}
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user",   "content": f"Analyze this call transcript: \"{transcript}\""}
             ],
             format='json',
-            options={"temperature": 0.1}
+            options={"temperature": 0.1}  # low = more consistent, less creative
         )
 
         content = response['message']['content'].strip()
-        
-        # SENIOR FIX 2: Markdown stripper. LLMs sometimes wrap JSON in backticks.
-        if content.startswith("```json"):
-            content = content.replace("```json", "").replace("```", "").strip()
+        # Clean markdown if model gets chatty despite instructions
+        content = content.replace("```json", "").replace("```", "").strip()
 
-        result = json.loads(content)
+        result   = json.loads(content)
+        status   = str(result.get("status", "safe")).lower()
+        prob     = int(result.get("probability", 0))
+        analysis = str(result.get("analysis", "Analysis complete."))
 
-        # SENIOR FIX 3: Safe dictionary extraction. Prevents crashes if the AI misnames a key.
-        status = result.get("status", "safe")
-        prob = int(result.get("probability", 0))
-        analysis = result.get("analysis", "Analysis complete.")
+        # ── Enforce consistency rule in code too (double safety) ──
+        if prob >= 50 and status != "scam_detected":
+            print(f"{YELLOW}[!] Model contradiction fixed: prob={prob}% but said safe → overriding to scam{RESET}")
+            status = "scam_detected"
+        if prob < 50 and status == "scam_detected":
+            print(f"{YELLOW}[!] Model contradiction fixed: prob={prob}% but said scam → overriding to safe{RESET}")
+            status = "safe"
 
         if status == "scam_detected":
-            print(f"{RED}[!] SCAM DETECTED — {analysis} ({prob}%){RESET}")
+            print(f"{RED}[!] SCAM DETECTED — {prob}% — {analysis}{RESET}")
         else:
-            print(f"{GREEN}[✓] SAFE CALL — {analysis} ({prob}%){RESET}")
-            
-        print(f"{CYAN}===================================================={RESET}\n")
+            print(f"{GREEN}[✓] SAFE — {prob}% risk — {analysis}{RESET}")
 
-        # Return the safely parsed variables directly to Flutter
         return {"status": status, "probability": prob, "analysis": analysis}
 
+    except json.JSONDecodeError:
+        print(f"{RED}[!] JSON parse error — raw response: {content}{RESET}")
+        # If JSON fails, do one more offline check then default safe
+        offline = offline_keyword_check(transcript)
+        return offline if offline else {
+            "status": "safe", "probability": 10,
+            "analysis": "Could not parse AI response. Please re-scan."
+        }
     except Exception as e:
-        print(f"{RED}[!] AI Error: {e}{RESET}")
-        return {
-            "status": "safe",
-            "probability": 0,
-            "analysis": "System error during analysis."
+        print(f"{RED}[!] Ollama error: {e}{RESET}")
+        offline = offline_keyword_check(transcript)
+        return offline if offline else {
+            "status": "safe", "probability": 10,
+            "analysis": "AI temporarily unavailable. Re-scan recommended."
         }
 
+
+# ─── /alert-family ────────────────────────────────────────────────────────────
+@app.post("/alert-family")
+async def send_family_alert(data: AlertData):
+    print(f"\n{YELLOW}[!] SENDING TWILIO SMS ALERT...{RESET}")
+
+    to_number = data.family_phone if data.family_phone else TARGET_FAMILY_NUMBER
+    if not to_number.startswith("+"):
+        to_number = f"+91{to_number}"
+
+    short_analysis = data.analysis[:100] + "..." if len(data.analysis) > 100 else data.analysis
+
+    sms_text = (
+        f"SCAM ALERT - Grandparent Guardian\n"
+        f"Risk: {data.probability}%\n"
+        f"Reason: {short_analysis}\n"
+        f"Transcript: {data.transcript[:80]}...\n"
+        f"Action: Call them NOW!"
+    )
+
+    try:
+        client  = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        message = client.messages.create(
+            body=sms_text,
+            from_=TWILIO_FROM_NUMBER,
+            to=to_number,
+        )
+        print(f"{GREEN}[✓] SMS SENT! SID: {message.sid}{RESET}\n")
+        return {"status": "success", "message": "SMS sent", "sid": message.sid}
+
+    except Exception as e:
+        print(f"{RED}[!] Twilio error: {e}{RESET}\n")
+        return {"status": "error", "message": str(e)}
+
+
+# ─── /test-sms ────────────────────────────────────────────────────────────────
+@app.get("/test-sms")
+async def test_sms():
+    """Visit http://localhost:8000/test-sms in browser to fire a real test SMS."""
+    fake = AlertData(
+        transcript  = "hello OTP bhej dijiye aapka account band ho jayega",
+        analysis    = "OTP scam with account block threat detected",
+        probability = 99,
+        family_phone= TARGET_FAMILY_NUMBER,
+    )
+    return await send_family_alert(fake)
+
+
+# ─── /health ──────────────────────────────────────────────────────────────────
+@app.get("/health")
+async def health():
+    return {
+        "status":  "ok",
+        "model":   "llama3.2:3b (Ollama)",
+        "sms":     "Twilio",
+        "offline": f"{len(OFFLINE_PHRASES)} safety phrases",
+    }
+
+
+# ─── START ────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    print(f"{GREEN}{'='*55}{RESET}")
+    print(f"{GREEN}  GRANDPARENT GUARDIAN AI CORE — PORT 8000{RESET}")
+    print(f"{GREEN}{'='*55}{RESET}")
+    print(f"{CYAN}  Model   : llama3.2:3b via Ollama{RESET}")
+    print(f"{CYAN}  SMS     : Twilio → {TARGET_FAMILY_NUMBER}{RESET}")
+    print(f"{CYAN}  Test    : http://localhost:8000/test-sms{RESET}")
+    print(f"{CYAN}  Health  : http://localhost:8000/health{RESET}")
+    print(f"{GREEN}{'='*55}{RESET}\n")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
