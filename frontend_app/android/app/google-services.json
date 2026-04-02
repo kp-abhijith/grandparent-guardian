@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "349388561626",
+    "project_id": "grandparent-guardian-7b13e",
+    "storage_bucket": "grandparent-guardian-7b13e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:349388561626:android:8ff661546615e8ec7159e3",
+        "android_client_info": {
+          "package_name": "com.example.frontend_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBRMiCptOm44-Jdg_F5Bo6hWEISs9RGVHM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
