@@ -174,7 +174,7 @@ class _MainDashboardState extends State<MainDashboard> {
           }
         });
       },
-      localeId:       'en_IN',
+      localeId:       'en-IN',
       listenMode:     ListenMode.dictation,
       partialResults: true,
       cancelOnError:  false,
@@ -211,7 +211,7 @@ class _MainDashboardState extends State<MainDashboard> {
         Uri.parse('$baseUrl/analyze'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'text': textToAnalyze}),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 120));
 
       if (response.statusCode == 200) {
         final json     = jsonDecode(response.body);

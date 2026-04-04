@@ -8,7 +8,7 @@ const kLightGray = Color(0xFFF8FAFC);
 const kMuted     = Color(0xFF64748B);
 
 const kBackendUrl = String.fromEnvironment('BACKEND_URL',
-    defaultValue: 'http://10.126.107.203');
+    defaultValue: 'http://192.168.137.173:8000');
 
 ThemeData buildTheme() => ThemeData(
       brightness: Brightness.light,
