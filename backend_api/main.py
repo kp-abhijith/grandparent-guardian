@@ -261,10 +261,10 @@ async def analyze_text(data: AudioText):
 async def send_family_alert(data: AlertData):
     print(f"\n{YELLOW}[!] SENDING TWILIO SMS ALERT...{RESET}")
 
-    to_number = data.family_phone if data.family_phone else TARGET_FAMILY_NUMBER
-    if not to_number.startswith("+"):
-        to_number = f"+91{to_number}"
-
+    # Get all family numbers (comma-separated from env)
+    family_numbers = data.family_phone if data.family_phone else TARGET_FAMILY_NUMBER
+    numbers = [n.strip() for n in family_numbers.split(",")]
+    
     short_analysis = data.analysis[:100] + "..." if len(data.analysis) > 100 else data.analysis
 
     sms_text = (
@@ -275,18 +275,38 @@ async def send_family_alert(data: AlertData):
         f"Action: Call them NOW!"
     )
 
+    sent_count = 0
+    failed = []
+    
     try:
-        client  = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-        message = client.messages.create(
-            body=sms_text,
-            from_=TWILIO_FROM_NUMBER,
-            to=to_number,
-        )
-        print(f"{GREEN}[✓] SMS SENT! SID: {message.sid}{RESET}\n")
-        return {"status": "success", "message": "SMS sent", "sid": message.sid}
+        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        
+        for to_number in numbers:
+            if not to_number.startswith("+"):
+                to_number = f"+91{to_number}"
+            
+            try:
+                message = client.messages.create(
+                    body=sms_text,
+                    from_=TWILIO_FROM_NUMBER,
+                    to=to_number,
+                )
+                print(f"{GREEN}[✓] SMS sent to {to_number}: {message.sid}{RESET}")
+                sent_count += 1
+            except Exception as e:
+                print(f"{RED}[!] Failed to send to {to_number}: {e}{RESET}")
+                failed.append(to_number)
+        
+        return {
+            "status": "success" if sent_count > 0 else "error",
+            "sent_to": sent_count,
+            "failed": failed,
+            "message": f"Sent to {sent_count} family member(s)"
+        }
 
     except Exception as e:
-        print(f"{RED}[!] Twilio error: {e}{RESET}\n")
+        print(f"{RED}[!] Twilio error: {e}{RESET}")
+        return {"status": "error", "message": str(e)}
         return {"status": "error", "message": str(e)}
 
 
