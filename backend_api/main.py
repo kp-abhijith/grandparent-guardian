@@ -31,7 +31,6 @@ TWILIO_FROM_NUMBER   = os.environ.get("TWILIO_FROM_NUMBER", "")
 TARGET_FAMILY_NUMBER = os.environ.get("TARGET_FAMILY_NUMBER", "")
 
 # ─── MINIMAL OFFLINE SAFETY NET ───────────────────────────────────────────────
-# ONLY phrases that are 100% scam in ANY context — no false positives possible
 OFFLINE_PHRASES = [
     "anydesk",
     "teamviewer",
@@ -39,6 +38,21 @@ OFFLINE_PHRASES = [
     "cyber crime notice",
     "customs fee",
     "fedex parcel seized",
+]
+
+SAFE_PHRASES = [
+    "kaise ho",
+    "kaisa hai",
+    "khaana khaya",
+    "khana kha liya",
+    "ghar kab aa raha",
+    "theek hoon",
+    "aap batao",
+    "how are you",
+    "did you eat",
+    "when are you coming",
+    "hello beta",
+    "namaste beta",
 ]
 
 def offline_keyword_check(text: str):
@@ -52,12 +66,55 @@ def offline_keyword_check(text: str):
         }
     return None
 
+def offline_safe_check(text: str):
+    lower = text.lower()
+    matched = [p for p in SAFE_PHRASES if p in lower]
+    if matched:
+        return {
+            "status":      "safe",
+            "probability": 5,
+            "analysis":    f"Family check-in detected: '{matched[0]}'",
+        }
+    return None
+
 # ─── THE BEST SYSTEM PROMPT ───────────────────────────────────────────────────
 SYSTEM_PROMPT = """
 You are an expert Indian scam detector AI protecting elderly grandparents from phone fraud.
 You have deep knowledge of Indian scam tactics, Indian culture, and family dynamics.
 
 The transcript may be in English, Hindi, Hinglish, or a mix — analyze the MEANING, not just keywords.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROBABILITY CALIBRATION GUIDE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CLEARLY SAFE (probability 0-15):
+- "hello kaise ho" / "how are you"
+- "khana kha liya?" / "did you eat?"
+- "beta ghar kab aa raha hai" / "when are you coming home"
+- "main theek hoon aap batao" / "I am fine how are you"
+- Any casual health or daily life check-in from family
+
+POSSIBLY SUSPICIOUS (probability 20-45):
+- Unknown person asking general questions
+- Delivery agent asking for address confirmation
+- Service technician calling for appointment
+
+LIKELY SCAM (probability 50-75):
+- Stranger asking for personal details
+- Urgency without clear reason
+- Offering unexpected prizes or loans
+
+DEFINITE SCAM (probability 76-100):
+- Any OTP request from stranger
+- Threats of arrest, police, account block
+- "Share OTP to receive money" in any language
+- AnyDesk, TeamViewer download request
+
+CRITICAL OVERRIDE RULE:
+If the transcript contains ANY of these phrases:
+"personal tone", "family member", "checking in", "familiar", "casual", "well-being", "daily life"
+-> probability MUST be below 20, status MUST be "safe"
+The model must NEVER contradict its own analysis text.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 THINK STEP BY STEP BEFORE ANSWERING:
@@ -127,9 +184,16 @@ async def analyze_text(data: AudioText):
         print(f"{RED}[!] OFFLINE CATCH: {quick['analysis']}{RESET}")
         return quick
 
+    # ── Quick check for safe family check-ins ──
+    safe_check = offline_safe_check(transcript)
+    if safe_check:
+        print(f"{GREEN}[✓] OFFLINE SAFE: {safe_check['analysis']}{RESET}")
+        return safe_check
+
     # ── Ollama AI — does the real thinking ────────────────────
     print(f"{CYAN}[*] Sending to Llama 3.2 for analysis...{RESET}")
 
+    content = ""
     try:
         response = ollama.chat(
             model='llama3.2:3b',
@@ -169,14 +233,24 @@ async def analyze_text(data: AudioText):
         print(f"{RED}[!] JSON parse error — raw response: {content}{RESET}")
         # If JSON fails, do one more offline check then default safe
         offline = offline_keyword_check(transcript)
-        return offline if offline else {
+        if offline:
+            return offline
+        safe = offline_safe_check(transcript)
+        if safe:
+            return safe
+        return {
             "status": "safe", "probability": 10,
             "analysis": "Could not parse AI response. Please re-scan."
         }
     except Exception as e:
         print(f"{RED}[!] Ollama error: {e}{RESET}")
         offline = offline_keyword_check(transcript)
-        return offline if offline else {
+        if offline:
+            return offline
+        safe = offline_safe_check(transcript)
+        if safe:
+            return safe
+        return {
             "status": "safe", "probability": 10,
             "analysis": "AI temporarily unavailable. Re-scan recommended."
         }
