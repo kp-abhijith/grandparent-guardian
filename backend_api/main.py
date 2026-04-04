@@ -40,19 +40,15 @@ OFFLINE_PHRASES = [
     "fedex parcel seized",
 ]
 
+# Trimmed down so polite greetings don't short-circuit the AI
 SAFE_PHRASES = [
-    "kaise ho",
-    "kaisa hai",
     "khaana khaya",
     "khana kha liya",
     "ghar kab aa raha",
     "theek hoon",
     "aap batao",
-    "how are you",
     "did you eat",
     "when are you coming",
-    "hello beta",
-    "namaste beta",
 ]
 
 def offline_keyword_check(text: str):
@@ -102,18 +98,21 @@ POSSIBLY SUSPICIOUS (probability 20-45):
 LIKELY SCAM (probability 50-75):
 - Stranger asking for personal details
 - Urgency without clear reason
-- Offering unexpected prizes or loans
 
 DEFINITE SCAM (probability 76-100):
 - Any OTP request from stranger
 - Threats of arrest, police, account block
 - "Share OTP to receive money" in any language
 - AnyDesk, TeamViewer download request
+- STRANGERS offering "scholarships", "lotteries", "loans", or "free gifts"
+- Unsolicited callers claiming to be from an "Institute", "College", or "Research" asking for personal details.
 
-CRITICAL OVERRIDE RULE:
-If the transcript contains ANY of these phrases:
-"personal tone", "family member", "checking in", "familiar", "casual", "well-being", "daily life"
--> probability MUST be below 20, status MUST be "safe"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL OVERRIDE RULES (FOLLOW STRICTLY):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. THE POLITENESS TRICK: Scammers often use extremely polite language ("hope you are doing well", "please", "sir"). Do NOT lower the risk score just because the caller is polite. If a stranger offers a scholarship or asks for data, it is a HIGH THREAT (80-100%).
+2. THE FAMILY OVERRIDE: If the transcript contains ANY of these phrases: "personal tone", "family member", "checking in", "familiar", "casual", "well-being", "daily life" -> probability MUST be below 20, status MUST be "safe".
+
 The model must NEVER contradict its own analysis text.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -121,7 +120,7 @@ THINK STEP BY STEP BEFORE ANSWERING:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. Who is likely calling — a stranger, institution, or known family/friend?
 2. What exactly are they asking for — OTP, money, access, personal info?
-3. Is there urgency, fear, or threat being created?
+3. Is there urgency, fear, or a financial hook being created?
 4. Does the tone feel scripted and professional, or personal and familiar?
 5. THEN make your final decision.
 
@@ -135,7 +134,7 @@ MARK AS SCAM (status: scam_detected):
 - Impersonating: banks, RBI, police, court, IRCTC, Amazon, FedEx, customs
 - Asking to download AnyDesk, TeamViewer, QuickSupport, or any remote app
 - Grandparent scam: stranger pretending to be a relative in emergency needing URGENT money
-- Lottery/prize scams: "You won, pay fee to claim"
+- Lottery/prize/scholarship scams: "You won/are eligible, tell me your details or pay a fee"
 - KYC scams: "Your account will close, update KYC now by sharing details"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -306,7 +305,6 @@ async def send_family_alert(data: AlertData):
 
     except Exception as e:
         print(f"{RED}[!] Twilio error: {e}{RESET}")
-        return {"status": "error", "message": str(e)}
         return {"status": "error", "message": str(e)}
 
 
