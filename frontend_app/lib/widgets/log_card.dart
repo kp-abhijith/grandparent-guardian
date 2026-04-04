@@ -44,12 +44,24 @@ class LogCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDanger = log['danger'] as bool? ?? false;
-    final color    = isDanger ? kDanger : kGreen;
-    final tactic   = log['tactic'] as String? ?? '';
-    final category = isDanger ? detectScamCategory(tactic) : '';
-    final bColor   = badgeColor(category);
-    final timeStr  = _relativeTime(log['createdAt']);
+    final isDanger  = log['danger'] as bool? ?? false;
+    final isBlocked = log['isBlocked'] as bool? ?? false;
+    final color     = isDanger ? kDanger : kGreen;
+    final tactic    = log['tactic'] as String? ?? '';
+    final timeStr   = _relativeTime(log['createdAt']);
+
+    String badgeText;
+    Color badgeColor;
+    if (isBlocked) {
+      badgeText = '🚫 BLOCKED';
+      badgeColor = kDanger;
+    } else if (isDanger) {
+      badgeText = '⚠ SCAM';
+      badgeColor = kGold;
+    } else {
+      badgeText = '✓ SAFE';
+      badgeColor = kGreen;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
@@ -93,6 +105,19 @@ class LogCard extends StatelessWidget {
                                     fontWeight: FontWeight.bold,
                                     color: color)),
                           ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: badgeColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(badgeText,
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: badgeColor)),
+                          ),
+                          const SizedBox(width: 8),
                           Text(timeStr,
                               style: const TextStyle(
                                   fontSize: 14, color: kMuted)),
@@ -117,22 +142,7 @@ class LogCard extends StatelessWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis),
                       ],
-                      if (isDanger && category.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            color:        bColor.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(category,
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: bColor)),
-                        ),
-                      ],
+
                     ],
                   ),
                 ),
@@ -151,15 +161,27 @@ class LogCard extends StatelessWidget {
   }
 
   void _showLogDetails(BuildContext context) {
-    final isDanger = log['danger'] as bool? ?? false;
-    final color = isDanger ? kDanger : kGreen;
-    final title = log['title'] as String? ?? 'Unknown';
-    final phone = log['phone'] as String? ?? 'Not available';
+    final isDanger  = log['danger'] as bool? ?? false;
+    final isBlocked = log['isBlocked'] as bool? ?? false;
+    final color     = isDanger ? kDanger : kGreen;
+    final title     = log['title'] as String? ?? 'Unknown';
+    final phone     = log['phone'] as String? ?? 'Not available';
     final transcript = log['preview'] as String? ?? 'No transcript available';
-    final tactic = log['tactic'] as String? ?? 'No analysis available';
-    final risk = log['risk'] as int? ?? 0;
-    final category = isDanger ? detectScamCategory(tactic) : '';
-    final bColor = badgeColor(category);
+    final tactic    = log['tactic'] as String? ?? 'No analysis available';
+    final risk      = log['risk'] as int? ?? 0;
+
+    String badgeText;
+    Color badgeColor;
+    if (isBlocked) {
+      badgeText = '🚫 BLOCKED';
+      badgeColor = kDanger;
+    } else if (isDanger) {
+      badgeText = '⚠ SCAM';
+      badgeColor = kGold;
+    } else {
+      badgeText = '✓ SAFE';
+      badgeColor = kGreen;
+    }
 
     showModalBottomSheet(
       context: context,
@@ -212,37 +234,35 @@ class LogCard extends StatelessWidget {
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                isDanger ? 'Scam Caller' : 'Safe Caller',
-                                style: TextStyle(
-                                  fontSize: 28,
-                                  fontWeight: FontWeight.w900,
-                                  color: color,
-                                ),
-                              ),
-                              if (category.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: bColor.withOpacity(0.12),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    category,
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: bColor,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
+                             children: [
+                               Text(
+                                 isDanger ? 'Scam Caller' : 'Safe Caller',
+                                 style: TextStyle(
+                                   fontSize: 28,
+                                   fontWeight: FontWeight.w900,
+                                   color: color,
+                                 ),
+                               ),
+                               const SizedBox(height: 4),
+                               Container(
+                                 padding: const EdgeInsets.symmetric(
+                                   horizontal: 12,
+                                   vertical: 4,
+                                 ),
+                                 decoration: BoxDecoration(
+                                   color: badgeColor.withOpacity(0.12),
+                                   borderRadius: BorderRadius.circular(12),
+                                 ),
+                                 child: Text(
+                                   badgeText,
+                                   style: TextStyle(
+                                     fontSize: 14,
+                                     fontWeight: FontWeight.bold,
+                                     color: badgeColor,
+                                   ),
+                                 ),
+                               ),
+                             ],
                           ),
                         ),
                       ],

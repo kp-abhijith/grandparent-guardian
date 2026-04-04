@@ -6,6 +6,7 @@ class DangerScreen extends StatelessWidget {
   final String analysisResult;
   final VoidCallback onMute;
   final VoidCallback onAlertFamily;
+  final VoidCallback onBlock;
 
   const DangerScreen({
     super.key,
@@ -13,6 +14,7 @@ class DangerScreen extends StatelessWidget {
     required this.analysisResult,
     required this.onMute,
     required this.onAlertFamily,
+    required this.onBlock,
   });
 
   @override
@@ -50,6 +52,8 @@ class DangerScreen extends StatelessWidget {
             _bigButton('🔇  MUTE CALL',    kNavy,  onMute),
             const SizedBox(height: 20),
             _bigButton('🔔  ALERT FAMILY', kGreen, onAlertFamily),
+            const SizedBox(height: 20),
+            _bigButton('🚫  BLOCK CALLER', kDanger, onBlock),
           ],
         ),
       ),

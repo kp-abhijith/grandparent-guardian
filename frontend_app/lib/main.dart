@@ -54,6 +54,7 @@ class _MainDashboardState extends State<MainDashboard> {
   String   _accumulatedText = '';
   String   _analysisResult  = '';
   int      _scamProbability = 0;
+  String   _documentId      = '';
 
   final SpeechToText _speechToText  = SpeechToText();
   final AudioPlayer  _warningPlayer = AudioPlayer();
@@ -222,7 +223,7 @@ class _MainDashboardState extends State<MainDashboard> {
 
         // Save to Firestore
         if (_userId.isNotEmpty) {
-          await _firebaseService.addScamLog(
+          final docId = await _firebaseService.addScamLog(
             userId:  _userId,
             title:   isScam ? 'Scam Caller' : 'Safe Caller',
             phone:   phone,
@@ -231,6 +232,7 @@ class _MainDashboardState extends State<MainDashboard> {
             danger:  isScam,
             tactic:  analysis,
           );
+          if (isScam) _documentId = docId;
         }
 
         if (isScam) {
@@ -293,6 +295,24 @@ class _MainDashboardState extends State<MainDashboard> {
       _accumulatedText = '';
       _analysisResult  = '';
       _scamProbability = 0;
+      _documentId      = '';
+    });
+  }
+
+  Future<void> _blockCaller() async {
+    if (_documentId.isEmpty) return;
+    await _firebaseService.blockCaller(_documentId);
+    _showSnackBar('Caller Blocked ✓', color: kGreen);
+    _warningPlayer.stop();
+    _manualController.clear();
+    setState(() {
+      _currentState    = AppState.safe;
+      _currentIndex    = 0;
+      _transcribedText = '';
+      _accumulatedText = '';
+      _analysisResult  = '';
+      _scamProbability = 0;
+      _documentId      = '';
     });
   }
 
@@ -306,6 +326,7 @@ class _MainDashboardState extends State<MainDashboard> {
       _accumulatedText = '';
       _analysisResult  = '';
       _scamProbability = 0;
+      _documentId      = '';
     });
   }
 
@@ -341,6 +362,7 @@ class _MainDashboardState extends State<MainDashboard> {
             analysisResult:  _analysisResult,
             onMute:          _muteCall,
             onAlertFamily:   _alertFamily,
+            onBlock:         _blockCaller,
           ),
         ),
       );

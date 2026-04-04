@@ -94,10 +94,11 @@ class HomeTab extends StatelessWidget {
       builder: (context, snap) {
         final docs = snap.data?.docs ?? [];
         final total = docs.length;
-        final blocked = docs.where((d) => d['danger'] == true).length;
-        final safeCalls = total - blocked;
+        final detected = docs.where((d) => d['danger'] == true).length;
+        final blocked = docs.where((d) => d['isBlocked'] == true).length;
+        final safeCalls = total - detected;
         final safeRatio = total == 0 ? 1.0 : safeCalls / total;
-        final scamRatio = total == 0 ? 0.0 : blocked / total;
+        final detectedRatio = total == 0 ? 0.0 : detected / total;
 
         return Container(
           padding: const EdgeInsets.all(24),
@@ -128,6 +129,11 @@ class HomeTab extends StatelessWidget {
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: kNavy)),
+                  Text('$detected Detected',
+                      style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: kGold)),
                   Text('$blocked Blocked',
                       style: const TextStyle(
                           fontSize: 20,
@@ -146,8 +152,8 @@ class HomeTab extends StatelessWidget {
                           flex: (safeRatio * 100).toInt(),
                           child: Container(color: kGreen)),
                       Expanded(
-                          flex: (scamRatio * 100).toInt(),
-                          child: Container(color: kDanger)),
+                          flex: (detectedRatio * 100).toInt(),
+                          child: Container(color: kGold)),
                       if (total == 0)
                         Expanded(
                             child: Container(
@@ -165,9 +171,9 @@ class HomeTab extends StatelessWidget {
                           color: kGreen,
                           fontWeight: FontWeight.bold)),
                   if (total > 0)
-                    const Text('Scam Risk',
+                    const Text('Scam Detected',
                         style: TextStyle(
-                            color: kDanger,
+                            color: kGold,
                             fontWeight: FontWeight.bold)),
                 ],
               ),

@@ -24,7 +24,7 @@ class LogsTab extends StatelessWidget {
               stream: FirebaseFirestore.instance
                   .collection('scam_logs')
                   .where('userId', isEqualTo: userId)
-                  .where('danger', isEqualTo: true)
+                  .where('isBlocked', isEqualTo: true)
                   .snapshots(),
               builder: (context, snap) {
                 final count = snap.data?.docs.length ?? 0;
