@@ -195,7 +195,7 @@ async def analyze_text(data: AudioText):
     content = ""
     try:
         response = ollama.chat(
-            model='llama3.2:3b',
+            model='llama3.2:1b',
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user",   "content": f"Analyze this call transcript: \"{transcript}\""}
@@ -326,7 +326,7 @@ async def test_sms():
 async def health():
     return {
         "status":  "ok",
-        "model":   "llama3.2:3b (Ollama)",
+        "model":   "llama3.2:1b (Ollama)",
         "sms":     "Twilio",
         "offline": f"{len(OFFLINE_PHRASES)} safety phrases",
     }
@@ -337,7 +337,7 @@ if __name__ == "__main__":
     print(f"{GREEN}{'='*55}{RESET}")
     print(f"{GREEN}  GRANDPARENT GUARDIAN AI CORE — PORT 8000{RESET}")
     print(f"{GREEN}{'='*55}{RESET}")
-    print(f"{CYAN}  Model   : llama3.2:3b via Ollama{RESET}")
+    print(f"{CYAN}  Model   : llama3.2:1b via Ollama{RESET}")
     print(f"{CYAN}  SMS     : Twilio → {TARGET_FAMILY_NUMBER}{RESET}")
     print(f"{CYAN}  Test    : http://localhost:8000/test-sms{RESET}")
     print(f"{CYAN}  Health  : http://localhost:8000/health{RESET}")
