@@ -49,6 +49,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSAllowsArbitraryLoads</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs microphone access to transcribe phone calls for scam detection.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

@@ -22,7 +22,11 @@ import 'widgets/incoming_call_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    debugPrint('Firebase init failed (offline mode): $e');
+  }
   runApp(const GrandparentGuardianApp());
 }
 
@@ -67,6 +71,8 @@ class _MainDashboardState extends State<MainDashboard> {
   final FirebaseService _firebaseService = FirebaseService();
   String _userId = '';
 
+
+
   @override
   void initState() {
     super.initState();
@@ -75,14 +81,18 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   Future<void> _initAuth() async {
-    final user = _authService.currentUser;
-    if (user != null) {
-      setState(() => _userId = user.uid);
-    } else {
-      final newUser = await _authService.signInAnonymously();
-      if (newUser != null) {
-        setState(() => _userId = newUser.uid);
+    try {
+      final user = _authService.currentUser;
+      if (user != null) {
+        setState(() => _userId = user.uid);
+      } else {
+        final newUser = await _authService.signInAnonymously();
+        if (newUser != null) {
+          setState(() => _userId = newUser.uid);
+        }
       }
+    } catch (e) {
+      debugPrint('Auth failed (offline mode): $e');
     }
   }
 
@@ -152,10 +162,12 @@ class _MainDashboardState extends State<MainDashboard> {
 
   void _startNewListenSession() {
     final String baseText = _accumulatedText.trim();
+    debugPrint('[DEBUG] _startNewListenSession, baseText: "$baseText"');
 
     _speechToText.listen(
       onResult: (result) {
         final String newWords = result.recognizedWords.trim();
+        debugPrint('[DEBUG] Speech recognized: "$newWords", confidence: ${result.confidence}');
         if (newWords.isEmpty) return;
 
         setState(() {
@@ -174,6 +186,7 @@ class _MainDashboardState extends State<MainDashboard> {
             }
           }
         });
+        debugPrint('[DEBUG] Updated transcribedText: "$_transcribedText"');
       },
       localeId:       'en-IN',
       listenMode:     ListenMode.dictation,
@@ -185,10 +198,13 @@ class _MainDashboardState extends State<MainDashboard> {
   }
 
   Future<void> _stopListening() async {
+    debugPrint('[DEBUG] _stopListening called, isManualMode: $_isManualMode');
     setState(() => _currentState = AppState.analyzing);
     if (!_isManualMode) await _speechToText.stop();
-    if (_isManualMode && _transcribedText.isEmpty) {
-      _transcribedText = _manualController.text.trim();
+    if (_isManualMode) {
+      final manualText = _manualController.text.trim();
+      debugPrint('[DEBUG] Manual text from controller: "$manualText"');
+      setState(() => _transcribedText = manualText);
     }
     _analyzeCall();
   }
@@ -200,39 +216,44 @@ class _MainDashboardState extends State<MainDashboard> {
 
     if (textToAnalyze.isEmpty) {
       _showSnackBar('No text to analyze.', color: Colors.orange);
-      setState(() { _currentState = AppState.safe; _currentIndex = 0; });
       return;
     }
 
-    if (_isManualMode) setState(() => _transcribedText = textToAnalyze);
+    // Build URL properly - kBackendUrl already has http://
+    final String targetUrl = kIsWeb ? 'localhost:8000' : kBackendUrl.split('://').last;
+    final baseUrl = 'http://$targetUrl';
+    debugPrint('Connecting to: $baseUrl');
 
     try {
-      final baseUrl = kIsWeb ? 'http://localhost:8000' : kBackendUrl;
       final response = await http.post(
         Uri.parse('$baseUrl/analyze'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'text': textToAnalyze}),
-      ).timeout(const Duration(seconds: 120));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final json     = jsonDecode(response.body);
         final prob     = (json['probability'] ?? 0) as int;
         final isScam   = json['status'] == 'scam_detected';
         final analysis = json['analysis'] ?? (isScam ? 'Scam detected.' : 'Call is safe.');
-        final phone    = _isManualMode ? 'Manual Text Entry' : '+91 98765 43210';
+        final phone   = _isManualMode ? 'Manual Text Entry' : '+91 98765 43210';
 
-        // Save to Firestore
+        // Save to Firestore (if user logged in)
         if (_userId.isNotEmpty) {
-          final docId = await _firebaseService.addScamLog(
-            userId:  _userId,
-            title:   isScam ? 'Scam Caller' : 'Safe Caller',
-            phone:   phone,
-            preview: textToAnalyze,
-            risk:    prob,
-            danger:  isScam,
-            tactic:  analysis,
-          );
-          if (isScam) _documentId = docId;
+          try {
+            final docId = await _firebaseService.addScamLog(
+              userId:  _userId,
+              title:   isScam ? 'Scam Caller' : 'Safe Caller',
+              phone:   phone,
+              preview: textToAnalyze,
+              risk:    prob,
+              danger:  isScam,
+              tactic:  analysis,
+            );
+            if (isScam) _documentId = docId;
+          } catch (_) {
+            // Firestore failed - continue anyway
+          }
         }
 
         if (isScam) {
@@ -244,18 +265,13 @@ class _MainDashboardState extends State<MainDashboard> {
           });
         } else {
           _showSnackBar('✓ Call is Safe ($prob% risk)', color: kGreen);
-          setState(() {
-            _currentState = AppState.safe;
-            _currentIndex  = 0;
-          });
+          setState(() => _currentState = AppState.safe);
         }
       } else {
-        _showSnackBar('Server error: ${response.statusCode}', color: kDanger);
-        setState(() { _currentState = AppState.safe; _currentIndex = 0; });
+        _showSnackBar('⚠ Server error: ${response.statusCode}', color: Colors.red);
       }
     } catch (e) {
-      _showSnackBar('Cannot reach backend. Check server is running.', color: kDanger);
-      setState(() { _currentState = AppState.safe; _currentIndex = 0; });
+      _showSnackBar('⚠ Cannot connect to $baseUrl', color: Colors.red);
     }
   }
 
